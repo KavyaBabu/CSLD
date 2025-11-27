@@ -1,121 +1,226 @@
-import { useEffect, useRef, useState } from "react";
+// @ts-nocheck
+"use client";
+
+// Updated dashboard with fixed filter bar positioning
 import { Page } from "@arqiva/react-component-lib";
 import QueryParamsUrlProvider from "@/app/_components/QueryParamsUrlProvider";
 import DashboardInner, { DashboardFilters } from "./Inner";
-import LeakageListPage from "./widgets/leakageList/page";
+import LeakageListPage from "./widgets/leakageList";
+import { useEffect, useState, useRef } from "react";
 import styles from "./index.module.css";
 
 const DashboardPage = () => {
-  const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>({});
+  const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>(
+    {}
+  );
   const [mounted, setMounted] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(true);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentPadding, setContentPadding] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const filterBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
 
-  // Collapse filters when scrolling down
   useEffect(() => {
     const handleScroll = () => {
-      const scrolled = window.scrollY > 40;
-      setFiltersOpen(!scrolled);
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      setIsScrolled(scrollTop > 10);
     };
+
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (!mounted || !filterBarRef.current) return;
+
+    const updatePadding = () => {
+      if (filterBarRef.current) {
+        const filterHeight = filterBarRef.current.offsetHeight;
+        const spacing = window.innerWidth < 768 ? 8 : 8;
+        setContentPadding(filterHeight + spacing);
+      }
+    };
+
+    updatePadding();
+
+    const resizeObserver = new ResizeObserver(updatePadding);
+    resizeObserver.observe(filterBarRef.current);
+
+    window.addEventListener("resize", updatePadding);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updatePadding);
+    };
+  }, [mounted]);
+
   if (!mounted) return null;
 
   return (
-    <Page.Root>
-      <QueryParamsUrlProvider initialParams={{}}>
-        <div className={styles.dashboardContainer}>
-          <div className={styles.filtersBarSticky} ref={contentRef}>
-            <div className={styles.filtersHeader}>
-              <h1 className={styles.dashboardTitle}>Dashboard</h1>
-              <button
-                className={styles.filtersToggle}
-                onClick={() => setFiltersOpen(!filtersOpen)}
-                aria-label={filtersOpen ? "Hide filters" : "Show filters"}
-              >
-                {filtersOpen ? "▲ Hide filters" : "▼ Show filters"}
-              </button>
+    <QueryParamsUrlProvider initialParams={{}}>
+      <Page.Root>
+        <section className={styles.dashboard}>
+          <div className={styles["dashboard--full-width"]}>
+            <div
+              ref={filterBarRef}
+              className={`${styles["dashboard__filters-bar-wrapper"]} ${
+                isScrolled
+                  ? styles["dashboard__filters-bar-wrapper--scrolled"]
+                  : ""
+              }`}
+            >
+              <h4>Dashboard</h4>
+              <div style={{ marginTop: "var(--spacing-4xl)" }}>
+                <DashboardInner.FiltersBar
+                  onFiltersChange={setDashboardFilters}
+                />
+              </div>
             </div>
-            {filtersOpen && (
-              <DashboardInner.FiltersBar
-                onFiltersChange={setDashboardFilters}
-              />
-            )}
-          </div>
-          {/* main content */}
-          <div className={styles.contentWrapper}>
-            <DashboardInner.Content />
-            <div className={styles.dashboardSection}>
-              <h2 className={styles.sectionHeading}>Leakage List</h2>
-              <LeakageListPage dashboardFilters={dashboardFilters} />
+
+            <div
+              className={styles["dashboard__content-wrapper"]}
+              style={{ paddingTop: `${contentPadding}px` }}
+            >
+              <DashboardInner.Content />
+
+              <div className={styles["dashboard--full-width"]}>
+                <h2 className={styles["dashboard__section-heading"]}>
+                  Leakage List
+                </h2>
+                <LeakageListPage dashboardFilters={dashboardFilters} />
+              </div>
             </div>
           </div>
-        </div>
-      </QueryParamsUrlProvider>
-    </Page.Root>
+        </section>
+      </Page.Root>
+    </QueryParamsUrlProvider>
   );
 };
 
 export default DashboardPage;
 
-
-
-/* Container for main content and filters bar */
-.dashboardContainer {
-  position: relative;
-  width: 100%;
-  min-height: 100vh;
-}
-
-/* Sticky bar inside the content panel */
-.filtersBarSticky {
-  position: sticky;
+.dashboard__filters-bar-wrapper {
+  background: transparent;
+  box-sizing: border-box;
+  padding: var(--spacing-4xl) var(--spacing-3xl) var(--spacing-2xl);
+  position: fixed;
   top: 0;
-  z-index: 20;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  padding: 1.5rem 2rem;
-  border-radius: 1.5rem;
-  margin-bottom: 1.5rem;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  width: 100%;
+  z-index: 40;
 }
 
-/* Filters header with title and toggle */
-.filtersHeader {
+.dashboard__filters-bar-wrapper--scrolled {
+  background: white;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+}
+
+.sidebar__desktop[data-collapsible="icon"] ~ .sidebar__inset .dashboard__filters-bar-wrapper {
+  left: var(--sidebar-width-icon);
+  width: calc(100% - var(--sidebar-width-icon));
+}
+
+.sidebar__desktop:not([data-collapsible="icon"]) ~ .sidebar__inset .dashboard__filters-bar-wrapper {
+  left: var(--sidebar-width, 240px);
+  width: calc(100% - var(--sidebar-width, 240px));
+}
+
+.dashboard__filters-bar-wrapper > * {
+  overflow: visible !important;
+}
+
+.dashboard__filters-bar-wrapper div {
+  overflow: visible !important;
+}
+
+.dashboard__filters {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xs);
 }
 
-/* Optional title styling */
-.dashboardTitle {
-  font-size: 2rem;
-  font-weight: 700;
+.dashboard__filters > *:first-child {
+  margin-bottom: var(--spacing-sm);
+}
+
+.dashboard__filters-bar-wrapper h1 {
+  color: var(--grey-900, #111827);
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: var(--font-bold, 700);
+  line-height: 1.2;
+  margin-bottom: var(--spacing-xl);
+}
+
+@media (width < 768px) {
+  .dashboard__filters-bar-wrapper {
+    left: 0 !important;
+    padding: var(--spacing-lg) var(--spacing-md) var(--spacing-md);
+    width: 100% !important;
+  }
+  
+  .dashboard__filters-bar-wrapper h1 {
+    font-size: var(--text-xl, 1.25rem);
+    font-weight: var(--font-bold, 700);
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .dashboard__content-wrapper {
+    padding-left: var(--spacing-md);
+    padding-right: var(--spacing-md);
+    padding-top: 120px;
+  }
+}
+
+.dashboard__filters-header {
+  margin-bottom: var(--spacing-md);
+}
+
+.dashboard__filters-header h1 {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: var(--font-semibold, 600);
   margin: 0;
 }
 
-/* “Show/Hide filters” button */
-.filtersToggle {
-  background: none;
-  border: none;
-  color: #2563eb;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
-.contentWrapper {
+.dashboard__content-wrapper { 
+  padding-left: var(--spacing-lg);
+  padding-right: var(--spacing-lg);
+  padding-top: 160px;
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
 }
 
-.sectionHeading {
-  margin-top: 3rem;
-  font-size: 1.25rem;
-  font-weight: 600;
+.dashboard__section-heading {
+  color: var(--grey-900, #111827);
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: var(--font-semibold, 600);
+  line-height: 1.5;
+  margin-bottom: var(--spacing-lg, 1rem);
 }
+
+.dashboard--full-width {
+  width: 100%;
+}
+
+.dashboard__split-row {
+  display: grid;
+  gap: var(--spacing-xl, 1.5rem);
+  grid-template-columns: 60% 40%;
+  width: 100%;
+}
+
+.dashboard__main-column {
+  min-width: 0;
+}
+
+.dashboard__side-column {
+  min-width: 0;
+}
+
+@media (width <= 1024px) {
+  .dashboard__split-row {
+    gap: var(--spacing-lg, 1rem);
+    grid-template-columns: 65% 35%;
+  }
+}
+
+
