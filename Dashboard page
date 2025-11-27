@@ -1,0 +1,448 @@
+// @ts-nocheck
+"use client";
+
+// Updated dashboard with fixed filter bar positioning
+import { Page } from "@arqiva/react-component-lib";
+import QueryParamsUrlProvider from "@/app/_components/QueryParamsUrlProvider";
+import DashboardInner, { DashboardFilters } from "./Inner";
+import LeakageListPage from "./widgets/leakageList";
+import { useEffect, useState, useRef } from "react";
+import styles from "./index.module.css";
+
+const DashboardPage = () => {
+  const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>(
+    {}
+  );
+  const [mounted, setMounted] = useState(false);
+  const [contentPadding, setContentPadding] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const filterBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      setIsScrolled(scrollTop > 10);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || !filterBarRef.current) return;
+
+    const updatePadding = () => {
+      if (filterBarRef.current) {
+        const filterHeight = filterBarRef.current.offsetHeight;
+        const spacing = window.innerWidth < 768 ? 8 : 8;
+        setContentPadding(filterHeight + spacing);
+      }
+    };
+
+    updatePadding();
+
+    const resizeObserver = new ResizeObserver(updatePadding);
+    resizeObserver.observe(filterBarRef.current);
+
+    window.addEventListener("resize", updatePadding);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updatePadding);
+    };
+  }, [mounted]);
+
+  if (!mounted) return null;
+
+  return (
+    <QueryParamsUrlProvider initialParams={{}}>
+      <Page.Root>
+        <section className={styles.dashboard}>
+          <div className={styles["dashboard--full-width"]}>
+            <div
+              ref={filterBarRef}
+              className={`${styles["dashboard__filters-bar-wrapper"]} ${
+                isScrolled
+                  ? styles["dashboard__filters-bar-wrapper--scrolled"]
+                  : ""
+              }`}
+            >
+              <h4>Dashboard</h4>
+              <div style={{ marginTop: "var(--spacing-4xl)" }}>
+                <DashboardInner.FiltersBar
+                  onFiltersChange={setDashboardFilters}
+                />
+              </div>
+            </div>
+
+            <div
+              className={styles["dashboard__content-wrapper"]}
+              style={{ paddingTop: `${contentPadding}px` }}
+            >
+              <DashboardInner.Content />
+
+              <div className={styles["dashboard--full-width"]}>
+                <h2 className={styles["dashboard__section-heading"]}>
+                  Leakage List
+                </h2>
+                <LeakageListPage dashboardFilters={dashboardFilters} />
+              </div>
+            </div>
+          </div>
+        </section>
+      </Page.Root>
+    </QueryParamsUrlProvider>
+  );
+};
+
+export default DashboardPage;
+
+
+"use client";
+
+import { useEffect } from "react";
+import { QueryParams, useQueryParams } from "@arqiva/react-component-lib";
+import {
+  GroupFilter,
+  groupFilterOverride,
+} from "@/lib/services/api/dashboard/Kpis/filters/GroupFilter";
+import {
+  DateRangeFilter,
+  dateRangeFilterOverride,
+} from "@/lib/services/api/dashboard/Kpis/filters/DateRangeFilter";
+import {
+  TimeFilter,
+  timeFilterOverride,
+} from "@/lib/services/api/dashboard/Kpis/filters/TimeFilter";
+import {
+  ConsumptionFilter,
+  consumptionFilterOverride,
+} from "@/lib/services/api/dashboard/Kpis/filters/ConsumptionFilter";
+import MeterConsumptionPage from "./widgets/meterConsumption/page";
+import LeakagePage from "./widgets/leakgaeInfo/page";
+import Top10MeterPage from "./widgets/top10Meters/page";
+import FlowValuesInner from "./widgets/flowValues/Inner";
+import styles from "./index.module.css";
+
+export interface DashboardFilters {
+  group_id?: string;
+  dateRange?: string;
+  timeRange?: string;
+  consumption_range?: string;
+}
+
+interface FiltersBarProps {
+  onFiltersChange: (filters: DashboardFilters) => void;
+}
+
+const FiltersBar = ({ onFiltersChange }: FiltersBarProps) => {
+  const { queryParams } = useQueryParams();
+
+  useEffect(() => {
+    onFiltersChange({
+      group_id: queryParams.group_id ? String(queryParams.group_id) : undefined,
+      dateRange: queryParams.dateRange
+        ? String(queryParams.dateRange)
+        : undefined,
+      timeRange: queryParams.timeRange
+        ? String(queryParams.timeRange)
+        : undefined,
+      consumption_range: queryParams.consumption_range
+        ? String(queryParams.consumption_range)
+        : undefined,
+    });
+  }, [
+    queryParams.group_id,
+    queryParams.dateRange,
+    queryParams.timeRange,
+    queryParams.consumption_range,
+    onFiltersChange,
+  ]);
+
+  return (
+    <div className={styles.dashboard__filters}>
+      <QueryParams.Params.Filters>
+        <GroupFilter />
+        <DateRangeFilter />
+        <TimeFilter />
+        <ConsumptionFilter />
+      </QueryParams.Params.Filters>
+      <QueryParams.Params.SelectedValues
+        resultsLoading={false}
+        resultsCount={0}
+        filterOverrides={{
+          ...groupFilterOverride,
+          ...dateRangeFilterOverride,
+          ...timeFilterOverride,
+          ...consumptionFilterOverride,
+        }}
+        filterIgnoreList={["q"]}
+      />
+    </div>
+  );
+};
+
+const Content = () => (
+  <section className={styles.dashboard}>
+    <div className={styles["dashboard--full-width"]}>
+      <h2 className={styles["dashboard__section-heading"]}>
+        Meter Consumption
+      </h2>
+      <MeterConsumptionPage />
+    </div>
+    <div className={styles["dashboard--full-width"]}>
+      <h2 className={styles["dashboard__section-heading"]}>Leakage</h2>
+      <LeakagePage />
+    </div>
+    <div className={styles["dashboard__split-row"]}>
+      <div className={styles["dashboard__main-column"]}>
+        <h2 className={styles["dashboard__section-heading"]}>Top 10 Meters</h2>
+        <Top10MeterPage />
+      </div>
+      <div className={styles["dashboard__side-column"]}>
+        <h2 className={styles["dashboard__section-heading"]}>Flow Values</h2>
+        <FlowValuesInner />
+      </div>
+    </div>
+  </section>
+);
+
+const DashboardInner = { FiltersBar, Content };
+export default DashboardInner;
+
+
+.dashboard__filters-bar-wrapper {
+  background: transparent;
+  box-sizing: border-box;
+  padding: var(--spacing-4xl) var(--spacing-3xl) var(--spacing-2xl);
+  position: fixed;
+  top: 0;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  width: 100%;
+  z-index: 40;
+}
+
+.dashboard__filters-bar-wrapper--scrolled {
+  background: white;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+}
+
+.sidebar__desktop[data-collapsible="icon"] ~ .sidebar__inset .dashboard__filters-bar-wrapper {
+  left: var(--sidebar-width-icon);
+  width: calc(100% - var(--sidebar-width-icon));
+}
+
+.sidebar__desktop:not([data-collapsible="icon"]) ~ .sidebar__inset .dashboard__filters-bar-wrapper {
+  left: var(--sidebar-width, 240px);
+  width: calc(100% - var(--sidebar-width, 240px));
+}
+
+.dashboard__filters-bar-wrapper > * {
+  overflow: visible !important;
+}
+
+.dashboard__filters-bar-wrapper div {
+  overflow: visible !important;
+}
+
+.dashboard__filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xs);
+}
+
+.dashboard__filters > *:first-child {
+  margin-bottom: var(--spacing-sm);
+}
+
+.dashboard__filters-bar-wrapper h1 {
+  color: var(--grey-900, #111827);
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: var(--font-bold, 700);
+  line-height: 1.2;
+  margin-bottom: var(--spacing-xl);
+}
+
+@media (width < 768px) {
+  .dashboard__filters-bar-wrapper {
+    left: 0 !important;
+    padding: var(--spacing-lg) var(--spacing-md) var(--spacing-md);
+    width: 100% !important;
+  }
+  
+  .dashboard__filters-bar-wrapper h1 {
+    font-size: var(--text-xl, 1.25rem);
+    font-weight: var(--font-bold, 700);
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .dashboard__content-wrapper {
+    padding-left: var(--spacing-md);
+    padding-right: var(--spacing-md);
+    padding-top: 120px;
+  }
+}
+
+.dashboard__filters-header {
+  margin-bottom: var(--spacing-md);
+}
+
+.dashboard__filters-header h1 {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: var(--font-semibold, 600);
+  margin: 0;
+}
+
+.dashboard__content-wrapper { 
+  padding-left: var(--spacing-lg);
+  padding-right: var(--spacing-lg);
+  padding-top: 160px;
+  width: 100%;
+}
+
+.dashboard__section-heading {
+  color: var(--grey-900, #111827);
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: var(--font-semibold, 600);
+  line-height: 1.5;
+  margin-bottom: var(--spacing-lg, 1rem);
+}
+
+.dashboard--full-width {
+  width: 100%;
+}
+
+.dashboard__split-row {
+  display: grid;
+  gap: var(--spacing-xl, 1.5rem);
+  grid-template-columns: 60% 40%;
+  width: 100%;
+}
+
+.dashboard__main-column {
+  min-width: 0;
+}
+
+.dashboard__side-column {
+  min-width: 0;
+}
+
+@media (width <= 1024px) {
+  .dashboard__split-row {
+    gap: var(--spacing-lg, 1rem);
+    grid-template-columns: 65% 35%;
+  }
+}
+
+// @ts-nocheck
+"use client";
+
+import { Sidebar, SidebarTemplates } from "@arqiva/react-component-lib";
+import { House, CircleQuestionMark, Gauge } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import routes from "@/lib/routes";
+import Logo from "./Logo";
+import User from "./User";
+
+interface NavigationInnerProps extends React.ComponentProps<
+  typeof Sidebar.Provider
+> {
+  logout?: React.ReactNode;
+  children?: React.ReactNode;
+  defaultOpen?: boolean;
+  stateCookieName?: string;
+}
+
+const NavigationInner = ({
+  children,
+  defaultOpen,
+  stateCookieName,
+  logout,
+}: NavigationInnerProps) => {
+  const pathname = usePathname();
+
+  const getDashboardCurrentPath = () => {
+    if (
+      pathname === routes.dashboard.root ||
+      pathname.startsWith(routes.dashboard.groups.root)
+    ) {
+      return routes.dashboard.root;
+    }
+    return;
+  };
+
+  return (
+    <Sidebar.Provider
+      stateCookieName={stateCookieName}
+      defaultOpen={defaultOpen}
+    >
+      <Sidebar.Root collapsible="icon">
+        <Sidebar.Header>
+          <Logo />
+        </Sidebar.Header>
+        <Sidebar.Content>
+          <Sidebar.Group.Root>
+            <Sidebar.Group.Content>
+              <Sidebar.Menu.Root>
+                <SidebarTemplates.CollapsibleMenuItem.Root
+                  linkComponent={Link}
+                  currentPath={getDashboardCurrentPath()}
+                  title="Dashboard"
+                  url={routes.dashboard.root}
+                  icon={<House />}
+                >
+                  <SidebarTemplates.CollapsibleMenuItem.SubItem
+                    linkComponent={Link}
+                    currentPath={
+                      pathname.startsWith(routes.dashboard.groups.root)
+                        ? routes.dashboard.groups.root
+                        : ""
+                    }
+                    url={routes.dashboard.groups.root}
+                  >
+                    Groups
+                  </SidebarTemplates.CollapsibleMenuItem.SubItem>
+                </SidebarTemplates.CollapsibleMenuItem.Root>
+
+                <SidebarTemplates.SimpleMenuItem
+                  linkComponent={Link}
+                  currentPath={pathname}
+                  title="Meters"
+                  url={routes.dashboard.meters}
+                  icon={<Gauge />}
+                />
+              </Sidebar.Menu.Root>
+            </Sidebar.Group.Content>
+          </Sidebar.Group.Root>
+        </Sidebar.Content>
+        <Sidebar.Footer>
+          <Sidebar.Menu.Root>
+            <SidebarTemplates.SimpleMenuItem
+              linkComponent={Link}
+              currentPath={pathname}
+              title="Support"
+              url={routes.dashboard.support}
+              icon={<CircleQuestionMark />}
+            />
+          </Sidebar.Menu.Root>
+          <User logout={logout} />
+        </Sidebar.Footer>
+      </Sidebar.Root>
+      <Sidebar.Inset>
+        <Sidebar.Trigger />
+        {children}
+      </Sidebar.Inset>
+    </Sidebar.Provider>
+  );
+};
+
+export default NavigationInner;
+
+
+
+
+
