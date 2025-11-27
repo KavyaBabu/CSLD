@@ -4,15 +4,43 @@ import { Page } from "@arqiva/react-component-lib";
 import QueryParamsUrlProvider from "@/app/_components/QueryParamsUrlProvider";
 import DashboardInner, { DashboardFilters } from "./Inner";
 import LeakageListPage from "./widgets/leakageList/page";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./index.module.css";
 
+// Accordion state: closed by default after scroll, open by default at top
 const DashboardPage = () => {
   const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>({});
   const [mounted, setMounted] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(true);
+  const [filterBarStyle, setFilterBarStyle] = useState<React.CSSProperties>({});
+  const contentRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => setMounted(true), []);
+
+  // Track scroll and auto-collapse filters bar
   useEffect(() => {
-    setMounted(true);
+    const handleScroll = () => {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      setIsFiltersOpen(scrollTop < 40); // open only when at top
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Dynamic fixed bar alignment to main container
+  useEffect(() => {
+    const updateBar = () => {
+      if (contentRef.current) {
+        const { offsetLeft, offsetWidth } = contentRef.current;
+        setFilterBarStyle({
+          left: offsetLeft,
+          width: offsetWidth,
+        });
+      }
+    };
+    updateBar();
+    window.addEventListener("resize", updateBar);
+    return () => window.removeEventListener("resize", updateBar);
   }, []);
 
   if (!mounted) return null;
@@ -20,28 +48,53 @@ const DashboardPage = () => {
   return (
     <Page.Root>
       <QueryParamsUrlProvider initialParams={{}}>
-        <main className={styles.dashboard__main}>
-          {/* Sticky filter bar inside main container */}
-          <div className={styles.dashboard__filters_bar_sticky}>
-            <h1 className={styles.dashboardTitle}>Dashboard</h1>
-            <DashboardInner.FiltersBar onFiltersChange={setDashboardFilters} />
-          </div>
-          <div className={styles.dashboard__content_wrapper}>
-            <DashboardInner.Content />
-            <div className={styles["dashboard--full-width"]}>
-              <h2 className={styles["dashboard__section-heading"]}>
-                Leakage List
-              </h2>
-              <LeakageListPage dashboardFilters={dashboardFilters} />
+        {/* Fixed Accordion Filter Bar */}
+        <div
+          className={`${styles.dashboard__filters_bar_fixed} ${isFiltersOpen ? styles.open : styles.closed}`}
+          style={{
+            ...filterBarStyle,
+            position: "fixed",
+            top: 0,
+            zIndex: 1200,
+          }}
+        >
+          <div className={styles.dashboard__filters_bar_inner}>
+            <div className={styles.dashboard__filters_header}>
+              <h1 className={styles.dashboardTitle}>Dashboard</h1>
+              <button
+                className={styles.dashboard__filters_toggle}
+                aria-label={isFiltersOpen ? "Collapse filters" : "Expand filters"}
+                onClick={() => setIsFiltersOpen((open) => !open)}
+              >
+                {isFiltersOpen ? "Hide filters ▲" : "Show filters ▼"}
+              </button>
             </div>
+            {isFiltersOpen && (
+              <DashboardInner.FiltersBar onFiltersChange={setDashboardFilters} />
+            )}
           </div>
-        </main>
+        </div>
+        <div
+          ref={contentRef}
+          className={styles.dashboard__content_wrapper}
+          style={{ margin: "0 auto", paddingTop: isFiltersOpen ? 170 : 70 }}
+        >
+          <DashboardInner.Content />
+          <div className={styles["dashboard--full-width"]}>
+            <h2 className={styles["dashboard__section-heading"]}>
+              Leakage List
+            </h2>
+            <LeakageListPage dashboardFilters={dashboardFilters} />
+          </div>
+        </div>
       </QueryParamsUrlProvider>
     </Page.Root>
   );
 };
 
 export default DashboardPage;
+
+
 
 
 :root {
@@ -51,36 +104,55 @@ export default DashboardPage;
   --dashboard-bar-bg: #fff;
 }
 
-/* Main content area */
-.dashboard__main {
-  position: relative;
-  width: 100%;
-  min-height: 100vh;
-  background: #fafbfc;
+.dashboard__filters_bar_fixed {
+  background: var(--dashboard-bar-bg);
+  border-radius: var(--dashboard-bar-radius);
+  box-shadow: var(--dashboard-bar-shadow);
+  transition: box-shadow 0.2s, background 0.2s, width 0.2s, left 0.2s;
+  /* Don't set left/width here; use dynamic style from JS */
+  pointer-events: auto;
 }
 
-/* Sticky filters bar (inside main, never over sidebar) */
-.dashboard__filters_bar_sticky {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--dashboard-bar-bg);
-  box-shadow: var(--dashboard-bar-shadow);
-  border-radius: var(--dashboard-bar-radius) var(--dashboard-bar-radius) 0 0;
+.dashboard__filters_bar_inner {
   padding: var(--dashboard-bar-padding);
-  margin-bottom: 1.5rem;
-  /* If you want a border: border-bottom: 1px solid #e5e7eb; */
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Accordion-style transitions */
+.dashboard__filters_bar_fixed.closed .dashboard__filters_bar_inner {
+  padding-bottom: 1rem;
+}
+
+.dashboard__filters_header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .dashboardTitle {
   font-size: 2rem;
   font-weight: 700;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.dashboard__filters_toggle {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--primary-600, #2563eb);
+  cursor: pointer;
+  padding: 0 0.5rem;
 }
 
 .dashboard__content_wrapper {
+  max-width: 1200px;
   width: 100%;
-  /* No top padding needed; sticky bar sits above naturally */
+  margin: 0 auto;
+  padding-left: var(--spacing-lg);
+  padding-right: var(--spacing-lg);
+  /* padding-top set inline by JS for dynamic bar height */
 }
 
 .dashboard__section-heading {
@@ -95,44 +167,23 @@ export default DashboardPage;
   width: 100%;
 }
 
-.dashboard__split-row {
-  display: grid;
-  gap: var(--spacing-xl, 1.5rem);
-  grid-template-columns: 60% 40%;
-  width: 100%;
-}
-
-.dashboard__main-column,
-.dashboard__side-column {
-  min-width: 0;
-}
-
-/* Responsive tweaks */
-@media (max-width: 1024px) {
-  .dashboard__split-row {
-    gap: var(--spacing-lg, 1rem);
-    grid-template-columns: 65% 35%;
-  }
-}
-
+/* Responsive: stick to top, use full width on mobile */
 @media (max-width: 768px) {
-  .dashboard__filters_bar_sticky {
-    padding: 1rem;
+  .dashboard__filters_bar_fixed {
+    left: 0 !important;
+    width: 100vw !important;
     border-radius: 0 0 var(--dashboard-bar-radius) var(--dashboard-bar-radius);
   }
   .dashboard__content_wrapper {
+    max-width: 100vw;
     padding-left: var(--spacing-md);
     padding-right: var(--spacing-md);
   }
 }
 
-/* Make sure popovers are above sticky bar */
 [data-radix-popover-content],
 [data-radix-dialog-content],
 .popover-content,
 [role="dialog"] {
-  z-index: 1000 !important;
+  z-index: 2000 !important;
 }
-
-
-
